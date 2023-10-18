@@ -1,5 +1,5 @@
 using MatchDataManager.Api.Models;
-using MatchDataManager.Api.Repositories;
+using MatchDataManager.Api.Repositories.Impl;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MatchDataManager.Api.Controllers;
@@ -8,30 +8,48 @@ namespace MatchDataManager.Api.Controllers;
 [Route("[controller]")]
 public class LocationsController : ControllerBase
 {
-    [HttpPost]
-    public IActionResult AddLocation(Location location)
+    private readonly ILocationsRepository _locationsRepository;
+
+    public LocationsController(ILocationsRepository locationsRepository)
     {
-        LocationsRepository.AddLocation(location);
+        _locationsRepository = locationsRepository;
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AddLocationAsync(Location location)
+    {
+        var validation = await ValidateLocationAsync(location);
+        if (validation != null)
+        {
+            return validation;
+        }
+
+        var result = await _locationsRepository.AddLocation(location);
+        if (result != 1)
+        {
+            return Problem("Adding to local repo failed.", statusCode: StatusCodes.Status304NotModified);
+        }
+
         return CreatedAtAction(nameof(GetById), new {id = location.Id}, location);
     }
 
     [HttpDelete]
-    public IActionResult DeleteLocation(Guid locationId)
+    public async Task<IActionResult> DeleteLocationAsync(Guid locationId)
     {
-        LocationsRepository.DeleteLocation(locationId);
+        await _locationsRepository.DeleteLocation(locationId);
         return NoContent();
     }
 
     [HttpGet]
     public IActionResult Get()
     {
-        return Ok(LocationsRepository.GetAllLocations());
+        return Ok(_locationsRepository.GetAllLocations());
     }
 
     [HttpGet("{id:guid}")]
     public IActionResult GetById(Guid id)
     {
-        var location = LocationsRepository.GetLocationById(id);
+        var location = _locationsRepository.GetLocationById(id);
         if (location is null)
         {
             return NotFound();
@@ -41,9 +59,41 @@ public class LocationsController : ControllerBase
     }
 
     [HttpPut]
-    public IActionResult UpdateLocation(Location location)
+    public async Task<IActionResult> UpdateLocationAsync(Location location)
     {
-        LocationsRepository.UpdateLocation(location);
+        var validation = await ValidateLocationAsync(location);
+        if (validation != null)
+        {
+            return validation;
+        }
+
+        var result = await _locationsRepository.UpdateLocation(location);
+        if (result != 1)
+        {
+            return Problem("Updating in local repo failed.", statusCode: StatusCodes.Status304NotModified);
+        }
+
         return Ok(location);
+    }
+
+    private async Task<IActionResult> ValidateLocationAsync(Location location)
+    {
+        if (location.Name.Length == 0)
+            return ValidationProblem(new ValidationProblemDetails() { Detail = "Name is required." });
+        if (location.Name.Length > 255)
+            return ValidationProblem(new ValidationProblemDetails() { Detail = "Name is to long. Max lenght is 255." });
+        if (location.City.Length == 0)
+            return ValidationProblem(new ValidationProblemDetails() { Detail = "City is required." });
+        if (location.City.Length > 55)
+            return ValidationProblem(new ValidationProblemDetails() { Detail = "City is to long. Max lenght is 55." });
+
+        var locations = await _locationsRepository.GetAllLocations();
+        var sameName = locations.FirstOrDefault(x => x.Name == location.Name);
+        if (sameName != null)
+        {
+            return ValidationProblem(new ValidationProblemDetails() { Detail = "Name already exists." });
+        }
+
+        return null;
     }
 }

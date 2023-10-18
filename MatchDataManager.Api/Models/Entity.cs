@@ -1,6 +1,9 @@
-﻿namespace MatchDataManager.Api.Models;
+﻿using SQLite;
 
-public abstract class Entity
+namespace MatchDataManager.Api.Models;
+
+public class Entity : IEntity
 {
+    [PrimaryKey]
     public Guid Id { get; set; }
 }
